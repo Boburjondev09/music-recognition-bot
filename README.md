@@ -1,5 +1,7 @@
 # Music Recognition Telegram Bot
 
+🔗 Live: [@shazam_r_bot](https://t.me/shazam_r_bot)
+
 Java 21 va Spring Boot asosidagi Telegram Long Polling bot. Foydalanuvchi voice, audio, kichik video yoki media-document yuboradi; servis faylni Telegram'dan yuklab oladi, ACRCloud orqali qo‘shiqni aniqlaydi, natijani PostgreSQL'ga yozadi va MinIO yoqilgan bo‘lsa original media faylni saqlaydi.
 
 ## Texnologiyalar
