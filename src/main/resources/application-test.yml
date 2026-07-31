@@ -1,0 +1,78 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: music-recognition-bot
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/music_recognition}
+    username: ${DB_USERNAME:music_user}
+    password: ${DB_PASSWORD:music_password}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${DB_MAX_POOL_SIZE:10}
+      minimum-idle: ${DB_MIN_IDLE:2}
+      connection-timeout: 30000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        format_sql: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: never
+
+telegram:
+  bot:
+    token: ${TELEGRAM_BOT_TOKEN}
+    username: ${TELEGRAM_BOT_USERNAME}
+    api-base-url: ${TELEGRAM_API_BASE_URL:https://api.telegram.org}
+    connect-timeout: ${TELEGRAM_CONNECT_TIMEOUT:10s}
+    read-timeout: ${TELEGRAM_READ_TIMEOUT:30s}
+
+acrcloud:
+  host: ${ACRCLOUD_HOST:identify-eu-west-1.acrcloud.com}
+  access-key: ${ACRCLOUD_ACCESS_KEY}
+  access-secret: ${ACRCLOUD_ACCESS_SECRET}
+  connect-timeout: ${ACRCLOUD_CONNECT_TIMEOUT:10s}
+  read-timeout: ${ACRCLOUD_READ_TIMEOUT:45s}
+
+minio:
+  enabled: ${MINIO_ENABLED:false}
+  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+  access-key: ${MINIO_ACCESS_KEY:minioadmin}
+  secret-key: ${MINIO_SECRET_KEY:minioadmin123}
+  bucket: ${MINIO_BUCKET:music-audio}
+  fail-on-error: ${MINIO_FAIL_ON_ERROR:false}
+
+app:
+  recognition:
+    max-file-size-bytes: ${MAX_RECOGNITION_FILE_SIZE:10485760}
+    history-limit: ${HISTORY_LIMIT:10}
+  processing:
+    max-concurrent-jobs: ${MAX_CONCURRENT_JOBS:4}
+    queue-capacity: ${PROCESSING_QUEUE_CAPACITY:100}
+  rate-limit:
+    max-requests: ${RATE_LIMIT_MAX_REQUESTS:10}
+    window-seconds: ${RATE_LIMIT_WINDOW_SECONDS:60}
+  cleanup:
+    stuck-processing-minutes: ${CLEANUP_STUCK_MINUTES:10}
+    interval-millis: ${CLEANUP_INTERVAL_MILLIS:300000}
+
+logging:
+  level:
+    root: INFO
+    uz.bobur.musicbot: INFO
