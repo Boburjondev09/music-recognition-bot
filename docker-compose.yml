@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-music_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-music_password}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -56,6 +56,9 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
       MINIO_BUCKET: ${MINIO_BUCKET:-music-audio}
+      YOUTUBE_LINK_ENABLED: ${YOUTUBE_LINK_ENABLED:-true}
+      YOUTUBE_MAX_DURATION_SECONDS: ${YOUTUBE_MAX_DURATION_SECONDS:-600}
+      YOUTUBE_DOWNLOAD_TIMEOUT: ${YOUTUBE_DOWNLOAD_TIMEOUT:-300s}
     ports:
       - "8080:8080"
 

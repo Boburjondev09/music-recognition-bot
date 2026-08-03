@@ -6,13 +6,16 @@ import jakarta.validation.constraints.NotNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
+import java.time.Duration;
+
 @Validated
 @ConfigurationProperties(prefix = "app")
 public record ApplicationProperties(
         @Valid @NotNull Recognition recognition,
         @Valid @NotNull Processing processing,
         @Valid @NotNull RateLimit rateLimit,
-        @Valid @NotNull Cleanup cleanup
+        @Valid @NotNull Cleanup cleanup,
+        @Valid @NotNull Youtube youtube
 ) {
     public record Recognition(
             @Min(1) long maxFileSizeBytes,
@@ -35,6 +38,13 @@ public record ApplicationProperties(
     public record Cleanup(
             @Min(1) int stuckProcessingMinutes,
             @Min(1000) long intervalMillis
+    ) {
+    }
+
+    public record Youtube(
+            boolean enabled,
+            @Min(1) long maxDurationSeconds,
+            @NotNull Duration downloadTimeout
     ) {
     }
 }

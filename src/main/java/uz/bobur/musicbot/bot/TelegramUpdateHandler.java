@@ -12,16 +12,20 @@ import uz.bobur.musicbot.domain.RecognitionResult;
 import uz.bobur.musicbot.domain.SearchHistoryView;
 import uz.bobur.musicbot.domain.TelegramMedia;
 import uz.bobur.musicbot.domain.TelegramUserContext;
+import uz.bobur.musicbot.enums.MediaType;
 import uz.bobur.musicbot.exception.FileValidationException;
 import uz.bobur.musicbot.exception.MusicBotException;
+import uz.bobur.musicbot.exception.YoutubeDownloadException;
 import uz.bobur.musicbot.service.MusicRecognitionService;
 import uz.bobur.musicbot.service.SearchHistoryService;
 import uz.bobur.musicbot.service.TelegramFileService;
 import uz.bobur.musicbot.service.UserRateLimiter;
+import uz.bobur.musicbot.service.YoutubeAudioDownloader;
 
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 @Component
 public class TelegramUpdateHandler {
@@ -29,7 +33,9 @@ public class TelegramUpdateHandler {
     private static final Logger log = LoggerFactory.getLogger(TelegramUpdateHandler.class);
 
     private final TelegramMediaExtractor mediaExtractor;
+    private final YoutubeLinkDetector youtubeLinkDetector;
     private final TelegramFileService telegramFileService;
+    private final YoutubeAudioDownloader youtubeAudioDownloader;
     private final MusicRecognitionService recognitionService;
     private final SearchHistoryService historyService;
     private final TelegramMessageSender messageSender;
@@ -37,9 +43,11 @@ public class TelegramUpdateHandler {
     private final ApplicationProperties properties;
     private final UserRateLimiter rateLimiter;
 
-    public TelegramUpdateHandler(TelegramMediaExtractor mediaExtractor, TelegramFileService telegramFileService, MusicRecognitionService recognitionService, SearchHistoryService historyService, TelegramMessageSender messageSender, BotMessageFormatter formatter, ApplicationProperties properties, UserRateLimiter rateLimiter) {
+    public TelegramUpdateHandler(TelegramMediaExtractor mediaExtractor, YoutubeLinkDetector youtubeLinkDetector, TelegramFileService telegramFileService, YoutubeAudioDownloader youtubeAudioDownloader, MusicRecognitionService recognitionService, SearchHistoryService historyService, TelegramMessageSender messageSender, BotMessageFormatter formatter, ApplicationProperties properties, UserRateLimiter rateLimiter) {
         this.mediaExtractor = mediaExtractor;
+        this.youtubeLinkDetector = youtubeLinkDetector;
         this.telegramFileService = telegramFileService;
+        this.youtubeAudioDownloader = youtubeAudioDownloader;
         this.recognitionService = recognitionService;
         this.historyService = historyService;
         this.messageSender = messageSender;
@@ -63,6 +71,11 @@ public class TelegramUpdateHandler {
 
         Optional<TelegramMedia> mediaOptional = mediaExtractor.extract(message);
         if (mediaOptional.isEmpty()) {
+            Optional<String> youtubeUrl = message.hasText() ? youtubeLinkDetector.extract(message.getText()) : Optional.empty();
+            if (youtubeUrl.isPresent()) {
+                handleYoutubeLink(user, youtubeUrl.get());
+                return;
+            }
             messageSender.sendText(user.chatId(), formatter.help());
             return;
         }
@@ -78,22 +91,47 @@ public class TelegramUpdateHandler {
             return;
         }
 
-        processMedia(user, media);
+        Integer progressMessageId = messageSender.sendAndReturn(user.chatId(), "⏳ Audio tahlil qilinmoqda...");
+        processRecognition(user, progressMessageId, () -> new RecognitionInput(media, telegramFileService.download(media)));
     }
 
-    private void processMedia(TelegramUserContext user, TelegramMedia media) {
-        Integer progressMessageId = messageSender.sendAndReturn(user.chatId(), "⏳ Audio tahlil qilinmoqda...");
+    private void handleYoutubeLink(TelegramUserContext user, String url) {
+        if (!properties.youtube().enabled()) {
+            messageSender.sendText(user.chatId(), "YouTube link orqali aniqlash hozircha o‘chirilgan. Iltimos, audio yoki voice fayl yuboring.");
+            return;
+        }
 
+        if (!rateLimiter.tryAcquire(user.userId())) {
+            messageSender.sendText(user.chatId(), "Juda ko‘p so‘rov yubordingiz. Iltimos, birozdan keyin qayta urinib ko‘ring.");
+            return;
+        }
+
+        Integer progressMessageId = messageSender.sendAndReturn(user.chatId(), "⏳ YouTube havolasidan audio yuklab olinmoqda...");
+        processRecognition(user, progressMessageId, () -> {
+            YoutubeAudioDownloader.DownloadedYoutubeAudio audio = youtubeAudioDownloader.download(url);
+            TelegramMedia media = new TelegramMedia(audio.videoId(), audio.videoId(), MediaType.YOUTUBE_LINK, audio.fileName(), audio.contentType(), (long) audio.content().length);
+            DownloadedTelegramFile file = new DownloadedTelegramFile(url, audio.fileName(), audio.contentType(), audio.content());
+            return new RecognitionInput(media, file);
+        });
+    }
+
+    private record RecognitionInput(TelegramMedia media, DownloadedTelegramFile file) {
+    }
+
+    private void processRecognition(TelegramUserContext user, Integer progressMessageId, Supplier<RecognitionInput> inputSupplier) {
         try {
-            DownloadedTelegramFile file = telegramFileService.download(media);
-            Optional<RecognitionResult> result = recognitionService.recognize(user, media, file);
+            RecognitionInput input = inputSupplier.get();
+            Optional<RecognitionResult> result = recognitionService.recognize(user, input.media(), input.file());
 
             if (result.isPresent()) {
                 messageSender.sendText(user.chatId(), formatter.recognized(result.get()));
+                if (input.media().mediaType() == MediaType.YOUTUBE_LINK) {
+                    messageSender.sendAudio(user.chatId(), input.file().content(), input.file().fileName(), result.get().title(), result.get().artist());
+                }
             } else {
                 messageSender.sendText(user.chatId(), "Qo‘shiqni aniqlab bo‘lmadi. 10–20 soniyalik, shovqini kamroq parcha yuboring.");
             }
-        } catch (FileValidationException exception) {
+        } catch (FileValidationException | YoutubeDownloadException exception) {
             messageSender.sendText(user.chatId(), exception.getMessage());
         } catch (MusicBotException exception) {
             log.warn("Recognition jarayonida boshqariladigan xatolik: {}", exception.getMessage());

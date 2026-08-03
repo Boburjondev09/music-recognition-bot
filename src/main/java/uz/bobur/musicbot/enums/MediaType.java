@@ -5,5 +5,6 @@ public enum MediaType {
     AUDIO,
     VIDEO,
     VIDEO_NOTE,
-    DOCUMENT
+    DOCUMENT,
+    YOUTUBE_LINK
 }

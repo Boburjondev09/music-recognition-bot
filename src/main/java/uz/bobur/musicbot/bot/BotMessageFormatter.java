@@ -19,10 +19,10 @@ public class BotMessageFormatter {
         return """
                 Assalomu alaykum%s!
                 
-                Men yuborilgan voice, audio yoki qisqa videodagi qo‘shiqni aniqlayman.
+                Men yuborilgan voice, audio, qisqa video yoki YouTube havolasidagi qo‘shiqni aniqlayman.
                 
                 Foydalanish:
-                1. 10–20 soniyalik aniq parcha yuboring.
+                1. 10–20 soniyalik aniq parcha yuboring yoki YouTube link tashlang.
                 2. Fayl 10 MB dan katta bo‘lmasin.
                 3. Natijani kuting.
                 
@@ -39,6 +39,7 @@ public class BotMessageFormatter {
                 • Telegram voice
                 • MP3, WAV, OGG, M4A va boshqa audio fayllar
                 • 10 MB gacha qisqa video
+                • YouTube video havolasi (link)
                 
                 Yaxshi natija uchun musiqa baland va fon shovqini kam bo‘lsin. Odatda 10–20 soniyalik parcha yetarli.
                 """;

@@ -5,10 +5,15 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.MediaType;
+import org.springframework.http.client.BufferingClientHttpRequestFactory;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.web.client.RestClient;
 import org.telegram.telegrambots.client.okhttp.OkHttpTelegramClient;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
+
+import java.util.List;
 
 @Configuration
 public class ClientConfiguration {
@@ -35,7 +40,13 @@ public class ClientConfiguration {
         requestFactory.setConnectTimeout(properties.connectTimeout());
         requestFactory.setReadTimeout(properties.readTimeout());
 
-        return builder.baseUrl("https://" + properties.host()).requestFactory(requestFactory).build();
+        MappingJackson2HttpMessageConverter acrcloudJsonConverter = new MappingJackson2HttpMessageConverter();
+        acrcloudJsonConverter.setSupportedMediaTypes(List.of(MediaType.APPLICATION_JSON, MediaType.TEXT_PLAIN));
+
+        return builder.baseUrl("https://" + properties.host())
+                .requestFactory(new BufferingClientHttpRequestFactory(requestFactory))
+                .messageConverters(converters -> converters.add(0, acrcloudJsonConverter))
+                .build();
     }
 
     @Bean

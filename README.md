@@ -2,7 +2,7 @@
 
 🔗 Live: [@shazam_r_bot](https://t.me/shazam_r_bot)
 
-Java 21 va Spring Boot asosidagi Telegram Long Polling bot. Foydalanuvchi voice, audio, kichik video yoki media-document yuboradi; servis faylni Telegram'dan yuklab oladi, ACRCloud orqali qo‘shiqni aniqlaydi, natijani PostgreSQL'ga yozadi va MinIO yoqilgan bo‘lsa original media faylni saqlaydi.
+Java 21 va Spring Boot asosidagi Telegram Long Polling bot. Foydalanuvchi voice, audio, kichik video, media-document yoki YouTube havolasini yuboradi; servis faylni Telegram'dan yuklab oladi (yoki YouTube havolasi bo‘lsa `yt-dlp` orqali audio ajratib oladi), ACRCloud orqali qo‘shiqni aniqlaydi, natijani PostgreSQL'ga yozadi va MinIO yoqilgan bo‘lsa original media faylni saqlaydi.
 
 ## Texnologiyalar
 
@@ -10,6 +10,7 @@ Java 21 va Spring Boot asosidagi Telegram Long Polling bot. Foydalanuvchi voice,
 - Spring Boot 3.5.16
 - TelegramBots Long Polling 10.0.0
 - ACRCloud Audio Recognition API
+- yt-dlp + ffmpeg (YouTube havolalaridan audio ajratib olish)
 - PostgreSQL + Flyway
 - MinIO Java SDK
 - Docker / Docker Compose
@@ -27,8 +28,9 @@ Java 21 va Spring Boot asosidagi Telegram Long Polling bot. Foydalanuvchi voice,
 - Audio fayl
 - Video va video-note
 - Audio/video MIME turidagi document
+- YouTube video havolasi (matn xabar ichida) — `youtube.com/watch?v=...`, `youtu.be/...`, `youtube.com/shorts/...`
 
-Botning standart fayl hajmi limiti 10 MB.
+Botning standart fayl hajmi limiti 10 MB. YouTube havolasi uchun standart video davomiylik limiti 10 daqiqa (`app.youtube.max-duration-seconds`).
 
 ## Tokenlar
 
@@ -89,7 +91,12 @@ MINIO_ENDPOINT=http://localhost:9000
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin123
 MINIO_BUCKET=music-audio
+YOUTUBE_LINK_ENABLED=true
+YOUTUBE_MAX_DURATION_SECONDS=600
+YOUTUBE_DOWNLOAD_TIMEOUT=300s
 ```
+
+YouTube havolalarini lokal (Docker'siz) sinash uchun kompyuteringizda `yt-dlp` va `ffmpeg` PATH'da bo‘lishi kerak (`pip install yt-dlp`, `ffmpeg` alohida o‘rnatiladi). Docker orqali ishga tushirilganda ular image ichida allaqachon mavjud.
 
 So‘ng:
 
@@ -106,6 +113,16 @@ MINIO_ENABLED=false
 ```
 
 Recognition va PostgreSQL history ishlashda davom etadi.
+
+## YouTube havolasini o‘chirish
+
+YouTube link orqali aniqlashni o‘chirish uchun:
+
+```text
+YOUTUBE_LINK_ENABLED=false
+```
+
+Bu holatda foydalanuvchi YouTube link yuborsa, bot audio/voice fayl yuborishni so‘raydi.
 
 ## Health endpoint
 

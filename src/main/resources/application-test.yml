@@ -71,6 +71,10 @@ app:
   cleanup:
     stuck-processing-minutes: ${CLEANUP_STUCK_MINUTES:10}
     interval-millis: ${CLEANUP_INTERVAL_MILLIS:300000}
+  youtube:
+    enabled: ${YOUTUBE_LINK_ENABLED:true}
+    max-duration-seconds: ${YOUTUBE_MAX_DURATION_SECONDS:600}
+    download-timeout: ${YOUTUBE_DOWNLOAD_TIMEOUT:300s}
 
 logging:
   level:

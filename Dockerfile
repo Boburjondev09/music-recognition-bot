@@ -2,13 +2,13 @@ FROM maven:3.9.9-eclipse-temurin-21 AS build
 WORKDIR /workspace
 
 COPY pom.xml .
-RUN mvn -q -DskipTests dependency:go-offline
-
 COPY src ./src
-RUN mvn -q -DskipTests clean package
+RUN --mount=type=cache,target=/root/.m2 mvn -q -DskipTests clean package
 
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
+
+RUN apk add --no-cache ffmpeg yt-dlp
 
 RUN addgroup -S spring && adduser -S spring -G spring
 USER spring:spring
