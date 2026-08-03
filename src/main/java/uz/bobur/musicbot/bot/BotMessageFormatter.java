@@ -14,23 +14,22 @@ public class BotMessageFormatter {
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm").withZone(ZoneId.of("Asia/Tashkent"));
 
-    public String start(String firstName) {
+    public String start(String firstName, boolean isAdmin) {
         String name = firstName == null || firstName.isBlank() ? "" : ", " + firstName;
+        String adminCommands = isAdmin ? "/history — oxirgi qidiruvlar\n/clear_history — tarixni o‘chirish\n" : "";
         return """
                 Assalomu alaykum%s!
-                
+
                 Men yuborilgan voice, audio, qisqa video yoki YouTube havolasidagi qo‘shiqni aniqlayman.
-                
+
                 Foydalanish:
                 1. 10–20 soniyalik aniq parcha yuboring yoki YouTube link tashlang.
                 2. Fayl 10 MB dan katta bo‘lmasin.
                 3. Natijani kuting.
-                
+
                 Komandalar:
-                /history — oxirgi qidiruvlar
-                /clear_history — tarixni o‘chirish
-                /help — yordam
-                """.formatted(name);
+                %s/help — yordam
+                """.formatted(name, adminCommands);
     }
 
     public String help() {

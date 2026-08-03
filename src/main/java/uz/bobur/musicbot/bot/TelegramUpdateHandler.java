@@ -148,13 +148,21 @@ public class TelegramUpdateHandler {
         String command = rawCommand.trim().split("\\s+", 2)[0].split("@", 2)[0].toLowerCase(Locale.ROOT);
 
         switch (command) {
-            case "/start" -> messageSender.sendText(user.chatId(), formatter.start(user.firstName()));
+            case "/start" -> messageSender.sendText(user.chatId(), formatter.start(user.firstName(), properties.admin().isAdmin(user.userId())));
             case "/help" -> messageSender.sendText(user.chatId(), formatter.help());
             case "/history" -> {
+                if (!properties.admin().isAdmin(user.userId())) {
+                    messageSender.sendText(user.chatId(), "Bu komanda faqat admin uchun mavjud.");
+                    return;
+                }
                 List<SearchHistoryView> history = historyService.recent(user.userId(), properties.recognition().historyLimit());
                 messageSender.sendText(user.chatId(), formatter.history(history));
             }
             case "/clear_history" -> {
+                if (!properties.admin().isAdmin(user.userId())) {
+                    messageSender.sendText(user.chatId(), "Bu komanda faqat admin uchun mavjud.");
+                    return;
+                }
                 long deleted = historyService.clear(user.userId());
                 messageSender.sendText(user.chatId(), deleted == 0 ? "Qidiruv tarixi allaqachon bo‘sh." : "Qidiruv tarixi o‘chirildi.");
             }

@@ -75,6 +75,8 @@ app:
     enabled: ${YOUTUBE_LINK_ENABLED:true}
     max-duration-seconds: ${YOUTUBE_MAX_DURATION_SECONDS:600}
     download-timeout: ${YOUTUBE_DOWNLOAD_TIMEOUT:300s}
+  admin:
+    user-ids: ${ADMIN_USER_IDS:}
 
 logging:
   level:

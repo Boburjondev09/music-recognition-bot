@@ -19,8 +19,10 @@ Java 21 va Spring Boot asosidagi Telegram Long Polling bot. Foydalanuvchi voice,
 
 - `/start` — bot haqida ma’lumot
 - `/help` — foydalanish bo‘yicha yordam
-- `/history` — oxirgi qidiruvlar
-- `/clear_history` — foydalanuvchining tarixini o‘chirish
+- `/history` — oxirgi qidiruvlar (faqat admin)
+- `/clear_history` — qidiruv tarixini o‘chirish (faqat admin)
+
+`/history` va `/clear_history` faqat `ADMIN_USER_IDS`da ko‘rsatilgan Telegram user ID'lar uchun ochiq. Oddiy foydalanuvchilar bu komandalarni ishlatmoqchi bo‘lsa, "Bu komanda faqat admin uchun mavjud" xabarini oladi.
 
 ## Qo‘llab-quvvatlanadigan xabarlar
 
@@ -94,7 +96,10 @@ MINIO_BUCKET=music-audio
 YOUTUBE_LINK_ENABLED=true
 YOUTUBE_MAX_DURATION_SECONDS=600
 YOUTUBE_DOWNLOAD_TIMEOUT=300s
+ADMIN_USER_IDS=123456789
 ```
+
+`ADMIN_USER_IDS` — vergul bilan ajratilgan Telegram user ID'lar ro‘yxati (masalan `111,222`). Telegram user ID'ni bilish uchun `@userinfobot`ga `/start` yuboring.
 
 YouTube havolalarini lokal (Docker'siz) sinash uchun kompyuteringizda `yt-dlp` va `ffmpeg` PATH'da bo‘lishi kerak (`pip install yt-dlp`, `ffmpeg` alohida o‘rnatiladi). Docker orqali ishga tushirilganda ular image ichida allaqachon mavjud.
 
