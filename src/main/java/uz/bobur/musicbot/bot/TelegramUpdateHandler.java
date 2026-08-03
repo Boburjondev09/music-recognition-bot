@@ -20,6 +20,7 @@ import uz.bobur.musicbot.service.MusicRecognitionService;
 import uz.bobur.musicbot.service.SearchHistoryService;
 import uz.bobur.musicbot.service.TelegramFileService;
 import uz.bobur.musicbot.service.UserRateLimiter;
+import uz.bobur.musicbot.service.UserRegistrationService;
 import uz.bobur.musicbot.service.YoutubeAudioDownloader;
 
 import java.util.List;
@@ -38,18 +39,20 @@ public class TelegramUpdateHandler {
     private final YoutubeAudioDownloader youtubeAudioDownloader;
     private final MusicRecognitionService recognitionService;
     private final SearchHistoryService historyService;
+    private final UserRegistrationService userRegistrationService;
     private final TelegramMessageSender messageSender;
     private final BotMessageFormatter formatter;
     private final ApplicationProperties properties;
     private final UserRateLimiter rateLimiter;
 
-    public TelegramUpdateHandler(TelegramMediaExtractor mediaExtractor, YoutubeLinkDetector youtubeLinkDetector, TelegramFileService telegramFileService, YoutubeAudioDownloader youtubeAudioDownloader, MusicRecognitionService recognitionService, SearchHistoryService historyService, TelegramMessageSender messageSender, BotMessageFormatter formatter, ApplicationProperties properties, UserRateLimiter rateLimiter) {
+    public TelegramUpdateHandler(TelegramMediaExtractor mediaExtractor, YoutubeLinkDetector youtubeLinkDetector, TelegramFileService telegramFileService, YoutubeAudioDownloader youtubeAudioDownloader, MusicRecognitionService recognitionService, SearchHistoryService historyService, UserRegistrationService userRegistrationService, TelegramMessageSender messageSender, BotMessageFormatter formatter, ApplicationProperties properties, UserRateLimiter rateLimiter) {
         this.mediaExtractor = mediaExtractor;
         this.youtubeLinkDetector = youtubeLinkDetector;
         this.telegramFileService = telegramFileService;
         this.youtubeAudioDownloader = youtubeAudioDownloader;
         this.recognitionService = recognitionService;
         this.historyService = historyService;
+        this.userRegistrationService = userRegistrationService;
         this.messageSender = messageSender;
         this.formatter = formatter;
         this.properties = properties;
@@ -63,6 +66,7 @@ public class TelegramUpdateHandler {
 
         Message message = update.getMessage();
         TelegramUserContext user = userContext(message);
+        userRegistrationService.registerOrUpdate(user);
 
         if (message.hasText() && message.getText().startsWith("/")) {
             handleCommand(user, message.getText());
