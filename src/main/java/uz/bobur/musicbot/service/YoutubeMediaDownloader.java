@@ -17,45 +17,74 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Service
-public class YoutubeAudioDownloader {
+public class YoutubeMediaDownloader {
 
-    private static final Logger log = LoggerFactory.getLogger(YoutubeAudioDownloader.class);
+    private static final Logger log = LoggerFactory.getLogger(YoutubeMediaDownloader.class);
     private static final String BINARY = "yt-dlp";
     private static final int LOG_EXCERPT_LENGTH = 500;
     private static final int MAX_ATTEMPTS = 3;
     private static final int SAMPLE_DURATION_SECONDS = 30;
     private static final String PRINT_TEMPLATE = "after_move:%(id)s\t%(title)s\t%(duration)s";
+    private static final String MAX_AUDIO_FILESIZE = "20M";
+    private static final String MAX_VIDEO_FILESIZE = "50M";
+    private static final String VIDEO_FORMAT = "bestvideo[height<=1080]+bestaudio/best[height<=1080]";
 
     private final ApplicationProperties properties;
     private final FileNameSanitizer fileNameSanitizer;
 
-    public YoutubeAudioDownloader(ApplicationProperties properties, FileNameSanitizer fileNameSanitizer) {
+    public YoutubeMediaDownloader(ApplicationProperties properties, FileNameSanitizer fileNameSanitizer) {
         this.properties = properties;
         this.fileNameSanitizer = fileNameSanitizer;
     }
 
-    public record DownloadedYoutubeAudio(String videoId, String fileName, String contentType, byte[] content, long durationSeconds) {
+    public record DownloadedYoutubeMedia(String videoId, String fileName, String contentType, byte[] content, long durationSeconds) {
     }
 
     /**
      * Downloads only a short clip for recognition — fingerprinting doesn't need the full track,
      * and skipping the rest cuts yt-dlp/ffmpeg time and the ACRCloud upload size dramatically.
      */
-    public DownloadedYoutubeAudio downloadSample(String url) {
-        return download(url, "*0-" + SAMPLE_DURATION_SECONDS);
+    public DownloadedYoutubeMedia downloadSample(String url) {
+        return downloadAudio(url, "*0-" + SAMPLE_DURATION_SECONDS);
     }
 
-    public DownloadedYoutubeAudio downloadFull(String url) {
-        DownloadedYoutubeAudio audio = download(url, null);
-
-        long maxDuration = properties.youtube().maxDurationSeconds();
-        if (audio.durationSeconds() > maxDuration) {
-            throw new YoutubeDownloadException("Video juda uzun. Iltimos, %d daqiqadan qisqaroq video yuboring.".formatted(maxDuration / 60));
-        }
+    public DownloadedYoutubeMedia downloadFullAudio(String url) {
+        DownloadedYoutubeMedia audio = downloadAudio(url, null);
+        enforceMaxDuration(audio);
         return audio;
     }
 
-    private DownloadedYoutubeAudio download(String url, String section) {
+    public DownloadedYoutubeMedia downloadVideo(String url) {
+        Path tempDir = createTempDir();
+
+        try {
+            Path outputTemplate = tempDir.resolve("video.%(ext)s");
+            List<String> command = List.of(
+                    BINARY, "--no-warnings", "--no-playlist",
+                    "-f", VIDEO_FORMAT,
+                    "--merge-output-format", "mp4",
+                    "--max-filesize", MAX_VIDEO_FILESIZE,
+                    "-o", outputTemplate.toString(),
+                    "--print", PRINT_TEMPLATE,
+                    url
+            );
+
+            DownloadedYoutubeMedia media = runDownload(command, tempDir, "video.mp4", "video/mp4", "mp4");
+            enforceMaxDuration(media);
+            return media;
+        } finally {
+            deleteRecursively(tempDir);
+        }
+    }
+
+    private void enforceMaxDuration(DownloadedYoutubeMedia media) {
+        long maxDuration = properties.youtube().maxDurationSeconds();
+        if (media.durationSeconds() > maxDuration) {
+            throw new YoutubeDownloadException("Video juda uzun. Iltimos, %d daqiqadan qisqaroq video yuboring.".formatted(maxDuration / 60));
+        }
+    }
+
+    private DownloadedYoutubeMedia downloadAudio(String url, String section) {
         Path tempDir = createTempDir();
 
         try {
@@ -67,31 +96,37 @@ public class YoutubeAudioDownloader {
             }
             command.addAll(List.of(
                     "-x", "--audio-format", "mp3", "--audio-quality", "5",
-                    "--max-filesize", "20M",
+                    "--max-filesize", MAX_AUDIO_FILESIZE,
                     "-o", outputTemplate.toString(),
                     "--print", PRINT_TEMPLATE,
                     url
             ));
 
+            return runDownload(command, tempDir, "audio.mp3", "audio/mpeg", "mp3");
+        } finally {
+            deleteRecursively(tempDir);
+        }
+    }
+
+    private DownloadedYoutubeMedia runDownload(List<String> command, Path tempDir, String expectedFileName, String contentType, String extension) {
+        try {
             String output = run(command, tempDir).strip();
             VideoMetadata metadata = parseMetadata(output);
 
-            Path audioFile = tempDir.resolve("audio.mp3");
-            if (!Files.exists(audioFile)) {
-                throw new YoutubeDownloadException("Audio faylni ajratib bo‘lmadi");
+            Path mediaFile = tempDir.resolve(expectedFileName);
+            if (!Files.exists(mediaFile)) {
+                throw new YoutubeDownloadException("Faylni ajratib bo‘lmadi");
             }
 
-            byte[] content = Files.readAllBytes(audioFile);
+            byte[] content = Files.readAllBytes(mediaFile);
             if (content.length == 0) {
-                throw new YoutubeDownloadException("YouTube'dan audio olib bo‘lmadi");
+                throw new YoutubeDownloadException("YouTube'dan fayl olib bo‘lmadi");
             }
 
-            String fileName = fileNameSanitizer.sanitize(metadata.title() + ".mp3");
-            return new DownloadedYoutubeAudio(metadata.videoId(), fileName, "audio/mpeg", content, metadata.durationSeconds());
+            String fileName = fileNameSanitizer.sanitize(metadata.title() + "." + extension);
+            return new DownloadedYoutubeMedia(metadata.videoId(), fileName, contentType, content, metadata.durationSeconds());
         } catch (IOException exception) {
             throw new YoutubeDownloadException("YouTube faylini o‘qib bo‘lmadi");
-        } finally {
-            deleteRecursively(tempDir);
         }
     }
 
@@ -124,10 +159,10 @@ public class YoutubeAudioDownloader {
 
             log.warn("yt-dlp muvaffaqiyatsiz tugadi ({}-urinish/{}, exit={}): {}", attempt, MAX_ATTEMPTS, result.exitCode(), limit(result.output()));
             if (attempt == MAX_ATTEMPTS) {
-                throw new YoutubeDownloadException("YouTube havolasidan audio olib bo‘lmadi. Linkni tekshiring.");
+                throw new YoutubeDownloadException("YouTube havolasidan fayl olib bo‘lmadi. Linkni tekshiring.");
             }
         }
-        throw new YoutubeDownloadException("YouTube havolasidan audio olib bo‘lmadi. Linkni tekshiring.");
+        throw new YoutubeDownloadException("YouTube havolasidan fayl olib bo‘lmadi. Linkni tekshiring.");
     }
 
     private record RunResult(int exitCode, String output) {

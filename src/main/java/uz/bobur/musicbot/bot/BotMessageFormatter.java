@@ -38,7 +38,7 @@ public class BotMessageFormatter {
                 • Telegram voice
                 • MP3, WAV, OGG, M4A va boshqa audio fayllar
                 • 10 MB gacha qisqa video
-                • YouTube video havolasi (link)
+                • YouTube video havolasi (link) — "Audio" yoki "Video" tugmasi orqali to‘liq faylni yuklab olish mumkin
                 
                 Yaxshi natija uchun musiqa baland va fon shovqini kam bo‘lsin. Odatda 10–20 soniyalik parcha yetarli.
                 """;

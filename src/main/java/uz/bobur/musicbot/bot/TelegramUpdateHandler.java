@@ -3,6 +3,7 @@ package uz.bobur.musicbot.bot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.User;
@@ -21,7 +22,7 @@ import uz.bobur.musicbot.service.SearchHistoryService;
 import uz.bobur.musicbot.service.TelegramFileService;
 import uz.bobur.musicbot.service.UserRateLimiter;
 import uz.bobur.musicbot.service.UserRegistrationService;
-import uz.bobur.musicbot.service.YoutubeAudioDownloader;
+import uz.bobur.musicbot.service.YoutubeMediaDownloader;
 
 import java.util.List;
 import java.util.Locale;
@@ -37,7 +38,7 @@ public class TelegramUpdateHandler {
     private final TelegramMediaExtractor mediaExtractor;
     private final YoutubeLinkDetector youtubeLinkDetector;
     private final TelegramFileService telegramFileService;
-    private final YoutubeAudioDownloader youtubeAudioDownloader;
+    private final YoutubeMediaDownloader youtubeMediaDownloader;
     private final MusicRecognitionService recognitionService;
     private final SearchHistoryService historyService;
     private final UserRegistrationService userRegistrationService;
@@ -46,11 +47,11 @@ public class TelegramUpdateHandler {
     private final ApplicationProperties properties;
     private final UserRateLimiter rateLimiter;
 
-    public TelegramUpdateHandler(TelegramMediaExtractor mediaExtractor, YoutubeLinkDetector youtubeLinkDetector, TelegramFileService telegramFileService, YoutubeAudioDownloader youtubeAudioDownloader, MusicRecognitionService recognitionService, SearchHistoryService historyService, UserRegistrationService userRegistrationService, TelegramMessageSender messageSender, BotMessageFormatter formatter, ApplicationProperties properties, UserRateLimiter rateLimiter) {
+    public TelegramUpdateHandler(TelegramMediaExtractor mediaExtractor, YoutubeLinkDetector youtubeLinkDetector, TelegramFileService telegramFileService, YoutubeMediaDownloader youtubeMediaDownloader, MusicRecognitionService recognitionService, SearchHistoryService historyService, UserRegistrationService userRegistrationService, TelegramMessageSender messageSender, BotMessageFormatter formatter, ApplicationProperties properties, UserRateLimiter rateLimiter) {
         this.mediaExtractor = mediaExtractor;
         this.youtubeLinkDetector = youtubeLinkDetector;
         this.telegramFileService = telegramFileService;
-        this.youtubeAudioDownloader = youtubeAudioDownloader;
+        this.youtubeMediaDownloader = youtubeMediaDownloader;
         this.recognitionService = recognitionService;
         this.historyService = historyService;
         this.userRegistrationService = userRegistrationService;
@@ -61,7 +62,16 @@ public class TelegramUpdateHandler {
     }
 
     public void handle(Update update) {
-        if (update == null || !update.hasMessage()) {
+        if (update == null) {
+            return;
+        }
+
+        if (update.hasCallbackQuery()) {
+            handleCallbackQuery(update.getCallbackQuery());
+            return;
+        }
+
+        if (!update.hasMessage()) {
             return;
         }
 
@@ -112,29 +122,87 @@ public class TelegramUpdateHandler {
             return;
         }
 
+        messageSender.sendYoutubeDownloadOptions(user.chatId(), link.videoId());
+
         Optional<RecognitionResult> cached = historyService.findCachedResult(link.videoId(), MediaType.YOUTUBE_LINK);
         if (cached.isPresent()) {
             messageSender.sendText(user.chatId(), formatter.recognized(cached.get()));
-            sendFullYoutubeAudio(user, link.url(), cached.get());
             return;
         }
 
         String url = link.url();
         Integer progressMessageId = messageSender.sendAndReturn(user.chatId(), "⏳ YouTube havolasidan audio yuklab olinmoqda...");
         processRecognition(user, progressMessageId, () -> {
-            YoutubeAudioDownloader.DownloadedYoutubeAudio sample = youtubeAudioDownloader.downloadSample(url);
+            YoutubeMediaDownloader.DownloadedYoutubeMedia sample = youtubeMediaDownloader.downloadSample(url);
             TelegramMedia media = new TelegramMedia(sample.videoId(), sample.videoId(), MediaType.YOUTUBE_LINK, sample.fileName(), sample.contentType(), (long) sample.content().length);
             DownloadedTelegramFile file = new DownloadedTelegramFile(url, sample.fileName(), sample.contentType(), sample.content());
             return new RecognitionInput(media, file);
-        }, result -> sendFullYoutubeAudio(user, url, result));
+        }, result -> {
+        });
     }
 
-    private void sendFullYoutubeAudio(TelegramUserContext user, String url, RecognitionResult result) {
+    private void handleCallbackQuery(CallbackQuery callbackQuery) {
+        messageSender.answerCallbackQuery(callbackQuery.getId());
+
+        String data = callbackQuery.getData();
+        if (data == null || callbackQuery.getMessage() == null) {
+            return;
+        }
+
+        User from = callbackQuery.getFrom();
+        TelegramUserContext user = new TelegramUserContext(from.getId(), callbackQuery.getMessage().getChatId(), from.getUserName(), from.getFirstName());
+        userRegistrationService.registerOrUpdate(user);
+
+        if (data.startsWith("yta:")) {
+            handleYoutubeAudioButton(user, data.substring(4));
+        } else if (data.startsWith("ytv:")) {
+            handleYoutubeVideoButton(user, data.substring(4));
+        }
+    }
+
+    private void handleYoutubeAudioButton(TelegramUserContext user, String videoId) {
+        if (!rateLimiter.tryAcquire(user.userId())) {
+            messageSender.sendText(user.chatId(), "Juda ko‘p so‘rov yubordingiz. Iltimos, birozdan keyin qayta urinib ko‘ring.");
+            return;
+        }
+
+        String url = "https://www.youtube.com/watch?v=" + videoId;
+        Optional<RecognitionResult> cached = historyService.findCachedResult(videoId, MediaType.YOUTUBE_LINK);
+        String title = cached.map(RecognitionResult::title).orElse(null);
+        String artist = cached.map(RecognitionResult::artist).orElse(null);
+
+        Integer progressMessageId = messageSender.sendAndReturn(user.chatId(), "⏳ Audio tayyorlanmoqda...");
         try {
-            YoutubeAudioDownloader.DownloadedYoutubeAudio full = youtubeAudioDownloader.downloadFull(url);
-            messageSender.sendAudio(user.chatId(), full.content(), full.fileName(), result.title(), result.artist());
+            YoutubeMediaDownloader.DownloadedYoutubeMedia audio = youtubeMediaDownloader.downloadFullAudio(url);
+            messageSender.sendAudio(user.chatId(), audio.content(), audio.fileName(), title, artist);
+        } catch (YoutubeDownloadException exception) {
+            messageSender.sendText(user.chatId(), exception.getMessage());
         } catch (RuntimeException exception) {
-            log.warn("To‘liq audio faylni yuborib bo‘lmadi: {}", exception.getMessage());
+            log.error("Audio yuklab berishda kutilmagan xatolik", exception);
+            messageSender.sendText(user.chatId(), "Audio faylni yuklab bo‘lmadi. Birozdan keyin qayta urinib ko‘ring.");
+        } finally {
+            messageSender.deleteMessage(user.chatId(), progressMessageId);
+        }
+    }
+
+    private void handleYoutubeVideoButton(TelegramUserContext user, String videoId) {
+        if (!rateLimiter.tryAcquire(user.userId())) {
+            messageSender.sendText(user.chatId(), "Juda ko‘p so‘rov yubordingiz. Iltimos, birozdan keyin qayta urinib ko‘ring.");
+            return;
+        }
+
+        String url = "https://www.youtube.com/watch?v=" + videoId;
+        Integer progressMessageId = messageSender.sendAndReturn(user.chatId(), "⏳ Video tayyorlanmoqda...");
+        try {
+            YoutubeMediaDownloader.DownloadedYoutubeMedia video = youtubeMediaDownloader.downloadVideo(url);
+            messageSender.sendVideo(user.chatId(), video.content(), video.fileName());
+        } catch (YoutubeDownloadException exception) {
+            messageSender.sendText(user.chatId(), exception.getMessage());
+        } catch (RuntimeException exception) {
+            log.error("Video yuklab berishda kutilmagan xatolik", exception);
+            messageSender.sendText(user.chatId(), "Video faylni yuklab bo‘lmadi. Birozdan keyin qayta urinib ko‘ring.");
+        } finally {
+            messageSender.deleteMessage(user.chatId(), progressMessageId);
         }
     }
 

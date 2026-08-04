@@ -3,11 +3,16 @@ package uz.bobur.musicbot.bot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.methods.send.SendAudio;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.send.SendVideo;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
@@ -52,6 +57,46 @@ public class TelegramMessageSender {
             telegramClient.execute(audio);
         } catch (TelegramApiException exception) {
             log.warn("Audio faylni yuborib bo‘lmadi. chatId={}", chatId, exception);
+        }
+    }
+
+    public void sendVideo(long chatId, byte[] content, String fileName) {
+        SendVideo video = SendVideo.builder()
+                .chatId(Long.toString(chatId))
+                .video(new InputFile(new ByteArrayInputStream(content), fileName))
+                .supportsStreaming(true)
+                .build();
+
+        try {
+            telegramClient.execute(video);
+        } catch (TelegramApiException exception) {
+            log.warn("Video faylni yuborib bo‘lmadi. chatId={}", chatId, exception);
+        }
+    }
+
+    public void sendYoutubeDownloadOptions(long chatId, String videoId) {
+        InlineKeyboardButton audioButton = InlineKeyboardButton.builder().text("🎵 Audio (mp3)").callbackData("yta:" + videoId).build();
+        InlineKeyboardButton videoButton = InlineKeyboardButton.builder().text("🎬 Video").callbackData("ytv:" + videoId).build();
+        InlineKeyboardMarkup markup = InlineKeyboardMarkup.builder().keyboardRow(new InlineKeyboardRow(audioButton, videoButton)).build();
+
+        SendMessage message = SendMessage.builder()
+                .chatId(Long.toString(chatId))
+                .text("Nimani yuklab olmoqchisiz?")
+                .replyMarkup(markup)
+                .build();
+
+        try {
+            telegramClient.execute(message);
+        } catch (TelegramApiException exception) {
+            log.error("Tugmali xabarni yuborib bo‘lmadi. chatId={}", chatId, exception);
+        }
+    }
+
+    public void answerCallbackQuery(String callbackQueryId) {
+        try {
+            telegramClient.execute(AnswerCallbackQuery.builder().callbackQueryId(callbackQueryId).build());
+        } catch (TelegramApiException exception) {
+            log.debug("Callback query'ga javob berib bo‘lmadi. id={}", callbackQueryId);
         }
     }
 
