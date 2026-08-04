@@ -16,7 +16,10 @@ public class YoutubeLinkDetector {
             Pattern.CASE_INSENSITIVE
     );
 
-    public Optional<String> extract(String text) {
+    public record YoutubeLink(String videoId, String url) {
+    }
+
+    public Optional<YoutubeLink> extract(String text) {
         if (text == null || text.isBlank() || !CONTAINS_YOUTUBE_DOMAIN.matcher(text).find()) {
             return Optional.empty();
         }
@@ -26,6 +29,7 @@ public class YoutubeLinkDetector {
             return Optional.empty();
         }
 
-        return Optional.of("https://www.youtube.com/watch?v=" + matcher.group(1));
+        String videoId = matcher.group(1);
+        return Optional.of(new YoutubeLink(videoId, "https://www.youtube.com/watch?v=" + videoId));
     }
 }

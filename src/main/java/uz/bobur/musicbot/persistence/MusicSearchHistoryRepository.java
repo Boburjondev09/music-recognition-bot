@@ -5,10 +5,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import uz.bobur.musicbot.enums.MediaType;
 import uz.bobur.musicbot.enums.RecognitionStatus;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface MusicSearchHistoryRepository extends JpaRepository<MusicSearchHistory, UUID> {
@@ -19,6 +21,12 @@ public interface MusicSearchHistoryRepository extends JpaRepository<MusicSearchH
     );
 
     long deleteByTelegramUserId(Long telegramUserId);
+
+    Optional<MusicSearchHistory> findFirstByTelegramFileIdAndMediaTypeAndStatusOrderByCreatedAtDesc(
+            String telegramFileId,
+            MediaType mediaType,
+            RecognitionStatus status
+    );
 
     @Modifying
     @Query("update MusicSearchHistory h set h.status = :failedStatus, h.errorMessage = :message, h.updatedAt = :now " +

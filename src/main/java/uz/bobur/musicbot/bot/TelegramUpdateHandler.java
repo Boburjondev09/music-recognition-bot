@@ -26,6 +26,7 @@ import uz.bobur.musicbot.service.YoutubeAudioDownloader;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 @Component
@@ -75,9 +76,9 @@ public class TelegramUpdateHandler {
 
         Optional<TelegramMedia> mediaOptional = mediaExtractor.extract(message);
         if (mediaOptional.isEmpty()) {
-            Optional<String> youtubeUrl = message.hasText() ? youtubeLinkDetector.extract(message.getText()) : Optional.empty();
-            if (youtubeUrl.isPresent()) {
-                handleYoutubeLink(user, youtubeUrl.get());
+            Optional<YoutubeLinkDetector.YoutubeLink> youtubeLink = message.hasText() ? youtubeLinkDetector.extract(message.getText()) : Optional.empty();
+            if (youtubeLink.isPresent()) {
+                handleYoutubeLink(user, youtubeLink.get());
                 return;
             }
             messageSender.sendText(user.chatId(), formatter.help());
@@ -96,10 +97,11 @@ public class TelegramUpdateHandler {
         }
 
         Integer progressMessageId = messageSender.sendAndReturn(user.chatId(), "⏳ Audio tahlil qilinmoqda...");
-        processRecognition(user, progressMessageId, () -> new RecognitionInput(media, telegramFileService.download(media)));
+        processRecognition(user, progressMessageId, () -> new RecognitionInput(media, telegramFileService.download(media)), result -> {
+        });
     }
 
-    private void handleYoutubeLink(TelegramUserContext user, String url) {
+    private void handleYoutubeLink(TelegramUserContext user, YoutubeLinkDetector.YoutubeLink link) {
         if (!properties.youtube().enabled()) {
             messageSender.sendText(user.chatId(), "YouTube link orqali aniqlash hozircha o‘chirilgan. Iltimos, audio yoki voice fayl yuboring.");
             return;
@@ -110,28 +112,43 @@ public class TelegramUpdateHandler {
             return;
         }
 
+        Optional<RecognitionResult> cached = historyService.findCachedResult(link.videoId(), MediaType.YOUTUBE_LINK);
+        if (cached.isPresent()) {
+            messageSender.sendText(user.chatId(), formatter.recognized(cached.get()));
+            sendFullYoutubeAudio(user, link.url(), cached.get());
+            return;
+        }
+
+        String url = link.url();
         Integer progressMessageId = messageSender.sendAndReturn(user.chatId(), "⏳ YouTube havolasidan audio yuklab olinmoqda...");
         processRecognition(user, progressMessageId, () -> {
-            YoutubeAudioDownloader.DownloadedYoutubeAudio audio = youtubeAudioDownloader.download(url);
-            TelegramMedia media = new TelegramMedia(audio.videoId(), audio.videoId(), MediaType.YOUTUBE_LINK, audio.fileName(), audio.contentType(), (long) audio.content().length);
-            DownloadedTelegramFile file = new DownloadedTelegramFile(url, audio.fileName(), audio.contentType(), audio.content());
+            YoutubeAudioDownloader.DownloadedYoutubeAudio sample = youtubeAudioDownloader.downloadSample(url);
+            TelegramMedia media = new TelegramMedia(sample.videoId(), sample.videoId(), MediaType.YOUTUBE_LINK, sample.fileName(), sample.contentType(), (long) sample.content().length);
+            DownloadedTelegramFile file = new DownloadedTelegramFile(url, sample.fileName(), sample.contentType(), sample.content());
             return new RecognitionInput(media, file);
-        });
+        }, result -> sendFullYoutubeAudio(user, url, result));
+    }
+
+    private void sendFullYoutubeAudio(TelegramUserContext user, String url, RecognitionResult result) {
+        try {
+            YoutubeAudioDownloader.DownloadedYoutubeAudio full = youtubeAudioDownloader.downloadFull(url);
+            messageSender.sendAudio(user.chatId(), full.content(), full.fileName(), result.title(), result.artist());
+        } catch (RuntimeException exception) {
+            log.warn("To‘liq audio faylni yuborib bo‘lmadi: {}", exception.getMessage());
+        }
     }
 
     private record RecognitionInput(TelegramMedia media, DownloadedTelegramFile file) {
     }
 
-    private void processRecognition(TelegramUserContext user, Integer progressMessageId, Supplier<RecognitionInput> inputSupplier) {
+    private void processRecognition(TelegramUserContext user, Integer progressMessageId, Supplier<RecognitionInput> inputSupplier, Consumer<RecognitionResult> onRecognized) {
         try {
             RecognitionInput input = inputSupplier.get();
             Optional<RecognitionResult> result = recognitionService.recognize(user, input.media(), input.file());
 
             if (result.isPresent()) {
                 messageSender.sendText(user.chatId(), formatter.recognized(result.get()));
-                if (input.media().mediaType() == MediaType.YOUTUBE_LINK) {
-                    messageSender.sendAudio(user.chatId(), input.file().content(), input.file().fileName(), result.get().title(), result.get().artist());
-                }
+                onRecognized.accept(result.get());
             } else {
                 messageSender.sendText(user.chatId(), "Qo‘shiqni aniqlab bo‘lmadi. 10–20 soniyalik, shovqini kamroq parcha yuboring.");
             }

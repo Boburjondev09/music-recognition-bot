@@ -133,6 +133,10 @@ public class MusicSearchHistory {
         this.errorMessage = null;
     }
 
+    public RecognitionResult toRecognitionResult() {
+        return new RecognitionResult(title, artist, album, releaseDate, labelName, timecode, songLink, spotifyUrl, appleMusicUrl);
+    }
+
     public void markNotFound() {
         this.status = RecognitionStatus.NOT_FOUND;
         this.errorMessage = null;

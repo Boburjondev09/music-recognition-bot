@@ -8,10 +8,13 @@ import uz.bobur.musicbot.domain.RecognitionResult;
 import uz.bobur.musicbot.domain.SearchHistoryView;
 import uz.bobur.musicbot.domain.TelegramMedia;
 import uz.bobur.musicbot.domain.TelegramUserContext;
+import uz.bobur.musicbot.enums.MediaType;
+import uz.bobur.musicbot.enums.RecognitionStatus;
 import uz.bobur.musicbot.persistence.MusicSearchHistory;
 import uz.bobur.musicbot.persistence.MusicSearchHistoryRepository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -50,6 +53,12 @@ public class SearchHistoryService {
     public void markFailed(UUID historyId, String errorMessage) {
         MusicSearchHistory history = getRequired(historyId);
         history.markFailed(limit(errorMessage, 2000));
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<RecognitionResult> findCachedResult(String telegramFileId, MediaType mediaType) {
+        return repository.findFirstByTelegramFileIdAndMediaTypeAndStatusOrderByCreatedAtDesc(telegramFileId, mediaType, RecognitionStatus.RECOGNIZED)
+                .map(MusicSearchHistory::toRecognitionResult);
     }
 
     @Transactional(readOnly = true)

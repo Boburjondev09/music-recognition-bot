@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -22,6 +23,8 @@ public class YoutubeAudioDownloader {
     private static final String BINARY = "yt-dlp";
     private static final int LOG_EXCERPT_LENGTH = 500;
     private static final int MAX_ATTEMPTS = 3;
+    private static final int SAMPLE_DURATION_SECONDS = 30;
+    private static final String PRINT_TEMPLATE = "after_move:%(id)s\t%(title)s\t%(duration)s";
 
     private final ApplicationProperties properties;
     private final FileNameSanitizer fileNameSanitizer;
@@ -31,28 +34,60 @@ public class YoutubeAudioDownloader {
         this.fileNameSanitizer = fileNameSanitizer;
     }
 
-    public record DownloadedYoutubeAudio(String videoId, String fileName, String contentType, byte[] content) {
+    public record DownloadedYoutubeAudio(String videoId, String fileName, String contentType, byte[] content, long durationSeconds) {
     }
 
-    public DownloadedYoutubeAudio download(String url) {
+    /**
+     * Downloads only a short clip for recognition — fingerprinting doesn't need the full track,
+     * and skipping the rest cuts yt-dlp/ffmpeg time and the ACRCloud upload size dramatically.
+     */
+    public DownloadedYoutubeAudio downloadSample(String url) {
+        return download(url, "*0-" + SAMPLE_DURATION_SECONDS);
+    }
+
+    public DownloadedYoutubeAudio downloadFull(String url) {
+        DownloadedYoutubeAudio audio = download(url, null);
+
+        long maxDuration = properties.youtube().maxDurationSeconds();
+        if (audio.durationSeconds() > maxDuration) {
+            throw new YoutubeDownloadException("Video juda uzun. Iltimos, %d daqiqadan qisqaroq video yuboring.".formatted(maxDuration / 60));
+        }
+        return audio;
+    }
+
+    private DownloadedYoutubeAudio download(String url, String section) {
         Path tempDir = createTempDir();
 
         try {
-            VideoMetadata metadata = fetchMetadata(url, tempDir);
+            Path outputTemplate = tempDir.resolve("audio.%(ext)s");
+            List<String> command = new ArrayList<>(List.of(BINARY, "--no-warnings", "--no-playlist", "-f", "bestaudio"));
+            if (section != null) {
+                command.add("--download-sections");
+                command.add(section);
+            }
+            command.addAll(List.of(
+                    "-x", "--audio-format", "mp3", "--audio-quality", "5",
+                    "--max-filesize", "20M",
+                    "-o", outputTemplate.toString(),
+                    "--print", PRINT_TEMPLATE,
+                    url
+            ));
 
-            long maxDuration = properties.youtube().maxDurationSeconds();
-            if (metadata.durationSeconds() > maxDuration) {
-                throw new YoutubeDownloadException("Video juda uzun. Iltimos, %d daqiqadan qisqaroq video yuboring.".formatted(maxDuration / 60));
+            String output = run(command, tempDir).strip();
+            VideoMetadata metadata = parseMetadata(output);
+
+            Path audioFile = tempDir.resolve("audio.mp3");
+            if (!Files.exists(audioFile)) {
+                throw new YoutubeDownloadException("Audio faylni ajratib bo‘lmadi");
             }
 
-            Path audioFile = downloadAudio(url, tempDir);
             byte[] content = Files.readAllBytes(audioFile);
             if (content.length == 0) {
                 throw new YoutubeDownloadException("YouTube'dan audio olib bo‘lmadi");
             }
 
             String fileName = fileNameSanitizer.sanitize(metadata.title() + ".mp3");
-            return new DownloadedYoutubeAudio(metadata.videoId(), fileName, "audio/mpeg", content);
+            return new DownloadedYoutubeAudio(metadata.videoId(), fileName, "audio/mpeg", content, metadata.durationSeconds());
         } catch (IOException exception) {
             throw new YoutubeDownloadException("YouTube faylini o‘qib bo‘lmadi");
         } finally {
@@ -63,11 +98,9 @@ public class YoutubeAudioDownloader {
     private record VideoMetadata(String videoId, String title, long durationSeconds) {
     }
 
-    private VideoMetadata fetchMetadata(String url, Path tempDir) throws IOException {
-        List<String> command = List.of(BINARY, "--no-warnings", "--skip-download", "--print", "%(id)s\t%(title)s\t%(duration)s", url);
-        String output = run(command, tempDir).strip();
-
-        String[] parts = output.split("\t", 3);
+    private VideoMetadata parseMetadata(String output) {
+        String lastLine = output.lines().reduce((first, second) -> second).orElse("");
+        String[] parts = lastLine.split("\t", 3);
         if (parts.length < 3 || parts[0].isBlank()) {
             throw new YoutubeDownloadException("YouTube linkini ochib bo‘lmadi. Linkni tekshiring.");
         }
@@ -78,27 +111,8 @@ public class YoutubeAudioDownloader {
         try {
             return (long) Double.parseDouble(raw.trim());
         } catch (NumberFormatException exception) {
-            throw new YoutubeDownloadException("Video davomiyligini aniqlab bo‘lmadi (jonli efir bo‘lishi mumkin)");
+            return 0L;
         }
-    }
-
-    private Path downloadAudio(String url, Path tempDir) throws IOException {
-        Path outputTemplate = tempDir.resolve("audio.%(ext)s");
-        List<String> command = List.of(
-                BINARY, "--no-warnings", "--no-playlist",
-                "-f", "bestaudio",
-                "-x", "--audio-format", "mp3", "--audio-quality", "5",
-                "--max-filesize", "20M",
-                "-o", outputTemplate.toString(),
-                url
-        );
-        run(command, tempDir);
-
-        Path audioFile = tempDir.resolve("audio.mp3");
-        if (!Files.exists(audioFile)) {
-            throw new YoutubeDownloadException("Audio faylni ajratib bo‘lmadi");
-        }
-        return audioFile;
     }
 
     private String run(List<String> command, Path workingDir) throws IOException {
