@@ -14,6 +14,14 @@ public class BotMessageFormatter {
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm").withZone(ZoneId.of("Asia/Tashkent"));
 
+    public String rateLimitExceeded() {
+        return "Juda ko‘p so‘rov yubordingiz. Iltimos, birozdan keyin qayta urinib ko‘ring.";
+    }
+
+    public String adminOnly() {
+        return "Bu komanda faqat admin uchun mavjud.";
+    }
+
     public String start(String firstName, boolean isAdmin) {
         String name = firstName == null || firstName.isBlank() ? "" : ", " + firstName;
         String adminCommands = isAdmin ? "/history — oxirgi qidiruvlar\n/clear_history — tarixni o‘chirish\n" : "";

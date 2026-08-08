@@ -102,7 +102,13 @@ public class TelegramUpdateHandler {
         }
 
         if (!rateLimiter.tryAcquire(user.userId())) {
-            messageSender.sendText(user.chatId(), "Juda ko‘p so‘rov yubordingiz. Iltimos, birozdan keyin qayta urinib ko‘ring.");
+            messageSender.sendText(user.chatId(), formatter.rateLimitExceeded());
+            return;
+        }
+
+        Optional<RecognitionResult> cachedMedia = historyService.findCachedResult(media.fileUniqueId(), media.mediaType());
+        if (cachedMedia.isPresent()) {
+            messageSender.sendText(user.chatId(), formatter.recognized(cachedMedia.get()));
             return;
         }
 
@@ -118,7 +124,7 @@ public class TelegramUpdateHandler {
         }
 
         if (!rateLimiter.tryAcquire(user.userId())) {
-            messageSender.sendText(user.chatId(), "Juda ko‘p so‘rov yubordingiz. Iltimos, birozdan keyin qayta urinib ko‘ring.");
+            messageSender.sendText(user.chatId(), formatter.rateLimitExceeded());
             return;
         }
 
@@ -161,46 +167,39 @@ public class TelegramUpdateHandler {
     }
 
     private void handleYoutubeAudioButton(TelegramUserContext user, String videoId) {
-        if (!rateLimiter.tryAcquire(user.userId())) {
-            messageSender.sendText(user.chatId(), "Juda ko‘p so‘rov yubordingiz. Iltimos, birozdan keyin qayta urinib ko‘ring.");
-            return;
-        }
-
         String url = "https://www.youtube.com/watch?v=" + videoId;
         Optional<RecognitionResult> cached = historyService.findCachedResult(videoId, MediaType.YOUTUBE_LINK);
         String title = cached.map(RecognitionResult::title).orElse(null);
         String artist = cached.map(RecognitionResult::artist).orElse(null);
 
-        Integer progressMessageId = messageSender.sendAndReturn(user.chatId(), "⏳ Audio tayyorlanmoqda...");
-        try {
-            YoutubeMediaDownloader.DownloadedYoutubeMedia audio = youtubeMediaDownloader.downloadFullAudio(url);
-            messageSender.sendAudio(user.chatId(), audio.content(), audio.fileName(), title, artist);
-        } catch (YoutubeDownloadException exception) {
-            messageSender.sendText(user.chatId(), exception.getMessage());
-        } catch (RuntimeException exception) {
-            log.error("Audio yuklab berishda kutilmagan xatolik", exception);
-            messageSender.sendText(user.chatId(), "Audio faylni yuklab bo‘lmadi. Birozdan keyin qayta urinib ko‘ring.");
-        } finally {
-            messageSender.deleteMessage(user.chatId(), progressMessageId);
-        }
+        handleYoutubeButton(user, "⏳ Audio tayyorlanmoqda...", "Audio yuklab berishda kutilmagan xatolik", "Audio faylni yuklab bo‘lmadi. Birozdan keyin qayta urinib ko‘ring.",
+                () -> youtubeMediaDownloader.downloadFullAudio(url),
+                audio -> messageSender.sendAudio(user.chatId(), audio.content(), audio.fileName(), title, artist));
     }
 
     private void handleYoutubeVideoButton(TelegramUserContext user, String videoId) {
+        String url = "https://www.youtube.com/watch?v=" + videoId;
+        handleYoutubeButton(user, "⏳ Video tayyorlanmoqda...", "Video yuklab berishda kutilmagan xatolik", "Video faylni yuklab bo‘lmadi. Birozdan keyin qayta urinib ko‘ring.",
+                () -> youtubeMediaDownloader.downloadVideo(url),
+                video -> messageSender.sendVideo(user.chatId(), video.content(), video.fileName()));
+    }
+
+    private void handleYoutubeButton(TelegramUserContext user, String progressText, String logMessage, String failureMessage,
+                                      Supplier<YoutubeMediaDownloader.DownloadedYoutubeMedia> downloader,
+                                      Consumer<YoutubeMediaDownloader.DownloadedYoutubeMedia> sender) {
         if (!rateLimiter.tryAcquire(user.userId())) {
-            messageSender.sendText(user.chatId(), "Juda ko‘p so‘rov yubordingiz. Iltimos, birozdan keyin qayta urinib ko‘ring.");
+            messageSender.sendText(user.chatId(), formatter.rateLimitExceeded());
             return;
         }
 
-        String url = "https://www.youtube.com/watch?v=" + videoId;
-        Integer progressMessageId = messageSender.sendAndReturn(user.chatId(), "⏳ Video tayyorlanmoqda...");
+        Integer progressMessageId = messageSender.sendAndReturn(user.chatId(), progressText);
         try {
-            YoutubeMediaDownloader.DownloadedYoutubeMedia video = youtubeMediaDownloader.downloadVideo(url);
-            messageSender.sendVideo(user.chatId(), video.content(), video.fileName());
+            sender.accept(downloader.get());
         } catch (YoutubeDownloadException exception) {
             messageSender.sendText(user.chatId(), exception.getMessage());
         } catch (RuntimeException exception) {
-            log.error("Video yuklab berishda kutilmagan xatolik", exception);
-            messageSender.sendText(user.chatId(), "Video faylni yuklab bo‘lmadi. Birozdan keyin qayta urinib ko‘ring.");
+            log.error(logMessage, exception);
+            messageSender.sendText(user.chatId(), failureMessage);
         } finally {
             messageSender.deleteMessage(user.chatId(), progressMessageId);
         }
@@ -241,7 +240,7 @@ public class TelegramUpdateHandler {
             case "/help" -> messageSender.sendText(user.chatId(), formatter.help());
             case "/history" -> {
                 if (!properties.admin().isAdmin(user.userId())) {
-                    messageSender.sendText(user.chatId(), "Bu komanda faqat admin uchun mavjud.");
+                    messageSender.sendText(user.chatId(), formatter.adminOnly());
                     return;
                 }
                 List<SearchHistoryView> history = historyService.recent(user.userId(), properties.recognition().historyLimit());
@@ -249,7 +248,7 @@ public class TelegramUpdateHandler {
             }
             case "/clear_history" -> {
                 if (!properties.admin().isAdmin(user.userId())) {
-                    messageSender.sendText(user.chatId(), "Bu komanda faqat admin uchun mavjud.");
+                    messageSender.sendText(user.chatId(), formatter.adminOnly());
                     return;
                 }
                 long deleted = historyService.clear(user.userId());
