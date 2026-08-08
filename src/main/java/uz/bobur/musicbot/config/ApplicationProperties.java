@@ -8,6 +8,8 @@ import org.springframework.validation.annotation.Validated;
 
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Validated
 @ConfigurationProperties(prefix = "app")
@@ -50,18 +52,30 @@ public record ApplicationProperties(
     ) {
     }
 
-    public record Admin(
-            String userIds
-    ) {
+    public static final class Admin {
+        private final Set<Long> adminIds;
+
+        public Admin(String userIds) {
+            this.adminIds = parse(userIds);
+        }
+
         public boolean isAdmin(long userId) {
+            return adminIds.contains(userId);
+        }
+
+        private static Set<Long> parse(String userIds) {
             if (userIds == null || userIds.isBlank()) {
-                return false;
+                return Set.of();
             }
-            return Arrays.stream(userIds.split(","))
-                    .map(String::trim)
-                    .filter(value -> !value.isEmpty())
-                    .mapToLong(Long::parseLong)
-                    .anyMatch(id -> id == userId);
+            try {
+                return Arrays.stream(userIds.split(","))
+                        .map(String::trim)
+                        .filter(value -> !value.isEmpty())
+                        .map(Long::parseLong)
+                        .collect(Collectors.toUnmodifiableSet());
+            } catch (NumberFormatException exception) {
+                throw new IllegalArgumentException("ADMIN_USER_IDS noto‘g‘ri formatda: " + userIds, exception);
+            }
         }
     }
 }
