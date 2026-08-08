@@ -22,6 +22,7 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
@@ -35,6 +36,8 @@ public class ACRCloudMusicRecognitionClient implements MusicRecognitionClient {
     private static final String DATA_TYPE = "audio";
     private static final String SIGNATURE_VERSION = "1";
     private static final int NO_RESULT_CODE = 1001;
+    private static final int MAX_ATTEMPTS = 3;
+    private static final Duration RETRY_BACKOFF = Duration.ofMillis(500);
 
     private static final Logger log = LoggerFactory.getLogger(ACRCloudMusicRecognitionClient.class);
 
@@ -48,18 +51,34 @@ public class ACRCloudMusicRecognitionClient implements MusicRecognitionClient {
 
     @Override
     public Optional<RecognitionResult> recognize(DownloadedTelegramFile file) {
-        try {
-            ACRCloudResponse response = restClient.post().uri(URI).contentType(MediaType.MULTIPART_FORM_DATA).body(buildRequestBody(file)).retrieve().body(ACRCloudResponse.class);
+        MultiValueMap<String, Object> body = buildRequestBody(file);
 
-            return mapResponse(response);
-        } catch (RecognitionProviderException exception) {
-            throw exception;
-        } catch (RestClientResponseException exception) {
-            log.warn("ACRCloud HTTP xatosi: status={}, body={}", exception.getStatusCode(), limit(exception.getResponseBodyAsString(), 500));
-            throw new RecognitionProviderException("ACRCloud servisiga ulanishda xatolik yuz berdi", exception);
-        } catch (RestClientException exception) {
-            log.warn("ACRCloud so‘rovi muvaffaqiyatsiz: {}", exception.toString());
-            throw new RecognitionProviderException("ACRCloud servisiga ulanishda xatolik yuz berdi", exception);
+        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            try {
+                ACRCloudResponse response = restClient.post().uri(URI).contentType(MediaType.MULTIPART_FORM_DATA).body(body).retrieve().body(ACRCloudResponse.class);
+                return mapResponse(response);
+            } catch (RecognitionProviderException exception) {
+                throw exception;
+            } catch (RestClientResponseException exception) {
+                log.warn("ACRCloud HTTP xatosi: status={}, body={}", exception.getStatusCode(), limit(exception.getResponseBodyAsString(), 500));
+                throw new RecognitionProviderException("ACRCloud servisiga ulanishda xatolik yuz berdi", exception);
+            } catch (RestClientException exception) {
+                log.warn("ACRCloud so‘rovi muvaffaqiyatsiz ({}-urinish/{}): {}", attempt, MAX_ATTEMPTS, exception.toString());
+                if (attempt == MAX_ATTEMPTS) {
+                    throw new RecognitionProviderException("ACRCloud servisiga ulanishda xatolik yuz berdi", exception);
+                }
+                sleepBeforeRetry();
+            }
+        }
+        throw new RecognitionProviderException("ACRCloud servisiga ulanishda xatolik yuz berdi");
+    }
+
+    private void sleepBeforeRetry() {
+        try {
+            Thread.sleep(RETRY_BACKOFF);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new RecognitionProviderException("ACRCloud so‘rovi to‘xtatildi", interrupted);
         }
     }
 
