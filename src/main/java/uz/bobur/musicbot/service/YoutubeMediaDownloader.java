@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -151,8 +152,18 @@ public class YoutubeMediaDownloader {
     }
 
     private String run(List<String> command, Path workingDir) throws IOException {
+        // Total time budget shared across all attempts, so one flaky link can't occupy a
+        // worker for MAX_ATTEMPTS x downloadTimeout — a single attempt already timing out
+        // means retrying with the same (network) conditions is unlikely to help either.
+        Instant deadline = Instant.now().plus(properties.youtube().downloadTimeout());
+
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-            RunResult result = runOnce(command, workingDir);
+            Duration remaining = Duration.between(Instant.now(), deadline);
+            if (remaining.isNegative() || remaining.isZero()) {
+                throw new YoutubeDownloadException("Yuklab olish vaqti tugadi. Qisqaroq video bilan urinib ko‘ring.");
+            }
+
+            RunResult result = runOnce(command, workingDir, remaining);
             if (result.exitCode() == 0) {
                 return result.output();
             }
@@ -168,8 +179,7 @@ public class YoutubeMediaDownloader {
     private record RunResult(int exitCode, String output) {
     }
 
-    private RunResult runOnce(List<String> command, Path workingDir) throws IOException {
-        Duration timeout = properties.youtube().downloadTimeout();
+    private RunResult runOnce(List<String> command, Path workingDir, Duration timeout) throws IOException {
         Path logFile = Files.createTempFile(workingDir, "yt-dlp-", ".log");
 
         Process process = new ProcessBuilder(command)
@@ -180,7 +190,7 @@ public class YoutubeMediaDownloader {
 
         boolean finished;
         try {
-            finished = process.waitFor(timeout.toSeconds(), TimeUnit.SECONDS);
+            finished = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             process.destroyForcibly();
