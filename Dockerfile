@@ -37,7 +37,15 @@ RUN apk add --no-cache \
         ca-certificates \
     && pip install --no-cache-dir --break-system-packages bgutil-ytdlp-pot-provider \
     && echo "=== ffmpeg ===" \
-    && ffmpeg -version | head -n 1 \
+    && ffmpeg -version | head -n 1
+
+# Alpine's packaged yt-dlp lags months behind YouTube's own anti-bot changes.
+# Overwrite it with a pinned nightly build that ships current YouTube player
+# clients (e.g. "visionos") not yet subject to the PO-token/GVS enforcement
+# that blocks official music videos on older yt-dlp versions.
+RUN wget -q -O /usr/bin/yt-dlp \
+        https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/2026.08.18.122307/yt-dlp \
+    && chmod +x /usr/bin/yt-dlp \
     && echo "=== yt-dlp ===" \
     && yt-dlp --version
 
