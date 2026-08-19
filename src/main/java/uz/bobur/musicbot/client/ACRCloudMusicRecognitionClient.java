@@ -22,10 +22,10 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
-import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 @Component
@@ -37,45 +37,80 @@ public class ACRCloudMusicRecognitionClient implements MusicRecognitionClient {
     private static final String SIGNATURE_VERSION = "1";
     private static final int NO_RESULT_CODE = 1001;
     private static final int MAX_ATTEMPTS = 3;
-    private static final Duration RETRY_BACKOFF = Duration.ofMillis(500);
+    private static final long BASE_BACKOFF_MILLIS = 500L;
+    private static final long MAX_JITTER_MILLIS = 250L;
 
     private static final Logger log = LoggerFactory.getLogger(ACRCloudMusicRecognitionClient.class);
 
     private final RestClient restClient;
     private final ACRCloudProperties properties;
 
-    public ACRCloudMusicRecognitionClient(@Qualifier("acrcloudRestClient") RestClient restClient, ACRCloudProperties properties) {
+    public ACRCloudMusicRecognitionClient(
+            @Qualifier("acrcloudRestClient") RestClient restClient,
+            ACRCloudProperties properties
+    ) {
         this.restClient = restClient;
         this.properties = properties;
     }
 
     @Override
     public Optional<RecognitionResult> recognize(DownloadedTelegramFile file) {
-        MultiValueMap<String, Object> body = buildRequestBody(file);
-
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
-                ACRCloudResponse response = restClient.post().uri(URI).contentType(MediaType.MULTIPART_FORM_DATA).body(body).retrieve().body(ACRCloudResponse.class);
+                ACRCloudResponse response = restClient.post()
+                        .uri(URI)
+                        .contentType(MediaType.MULTIPART_FORM_DATA)
+                        .body(buildRequestBody(file))
+                        .retrieve()
+                        .body(ACRCloudResponse.class);
+
                 return mapResponse(response);
             } catch (RecognitionProviderException exception) {
                 throw exception;
             } catch (RestClientResponseException exception) {
-                log.warn("ACRCloud HTTP xatosi: status={}, body={}", exception.getStatusCode(), limit(exception.getResponseBodyAsString(), 500));
-                throw new RecognitionProviderException("ACRCloud servisiga ulanishda xatolik yuz berdi", exception);
+                int status = exception.getStatusCode().value();
+                boolean retryable = isRetryableStatus(status);
+                log.warn(
+                        "ACRCloud HTTP xatosi ({}-urinish/{}): status={}, retryable={}, body={}",
+                        attempt,
+                        MAX_ATTEMPTS,
+                        status,
+                        retryable,
+                        limit(exception.getResponseBodyAsString(), 500)
+                );
+
+                if (!retryable || attempt == MAX_ATTEMPTS) {
+                    throw new RecognitionProviderException("ACRCloud servisiga ulanishda xatolik yuz berdi", exception);
+                }
+                sleepBeforeRetry(attempt);
             } catch (RestClientException exception) {
-                log.warn("ACRCloud so‘rovi muvaffaqiyatsiz ({}-urinish/{}): {}", attempt, MAX_ATTEMPTS, exception.toString());
+                log.warn(
+                        "ACRCloud so‘rovi muvaffaqiyatsiz ({}-urinish/{}): {}",
+                        attempt,
+                        MAX_ATTEMPTS,
+                        exception.toString()
+                );
                 if (attempt == MAX_ATTEMPTS) {
                     throw new RecognitionProviderException("ACRCloud servisiga ulanishda xatolik yuz berdi", exception);
                 }
-                sleepBeforeRetry();
+                sleepBeforeRetry(attempt);
             }
         }
+
         throw new RecognitionProviderException("ACRCloud servisiga ulanishda xatolik yuz berdi");
     }
 
-    private void sleepBeforeRetry() {
+    boolean isRetryableStatus(int status) {
+        return status == 429 || status >= 500;
+    }
+
+    private void sleepBeforeRetry(int attempt) {
+        long exponential = BASE_BACKOFF_MILLIS * (1L << Math.max(0, attempt - 1));
+        long jitter = ThreadLocalRandom.current().nextLong(MAX_JITTER_MILLIS + 1);
+        long delay = exponential + jitter;
+
         try {
-            Thread.sleep(RETRY_BACKOFF);
+            Thread.sleep(delay);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new RecognitionProviderException("ACRCloud so‘rovi to‘xtatildi", interrupted);
@@ -105,7 +140,16 @@ public class ACRCloudMusicRecognitionClient implements MusicRecognitionClient {
     }
 
     private String sign(String timestamp) {
-        String stringToSign = String.join("\n", HTTP_METHOD, URI, properties.accessKey(), DATA_TYPE, SIGNATURE_VERSION, timestamp);
+        String stringToSign = String.join(
+                "\n",
+                HTTP_METHOD,
+                URI,
+                properties.accessKey(),
+                DATA_TYPE,
+                SIGNATURE_VERSION,
+                timestamp
+        );
+
         try {
             Mac mac = Mac.getInstance("HmacSHA1");
             mac.init(new SecretKeySpec(properties.accessSecret().getBytes(StandardCharsets.UTF_8), "HmacSHA1"));
@@ -129,28 +173,41 @@ public class ACRCloudMusicRecognitionClient implements MusicRecognitionClient {
             throw new RecognitionProviderException("ACRCloud xatosi: " + limit(response.status().msg(), 500));
         }
 
-        List<ACRCloudResponse.Music> matches = response.metadata() == null ? null : response.metadata().music();
+        List<ACRCloudResponse.Music> matches = response.metadata() == null
+                ? null
+                : response.metadata().music();
         if (matches == null || matches.isEmpty()) {
             return Optional.empty();
         }
 
-        ACRCloudResponse.Music track = matches.get(0);
-        String artist = track.artists() == null ? null : track.artists().stream().map(ACRCloudResponse.Artist::name).collect(Collectors.joining(", "));
+        ACRCloudResponse.Music track = matches.getFirst();
+        String artist = track.artists() == null
+                ? null
+                : track.artists().stream()
+                .map(ACRCloudResponse.Artist::name)
+                .collect(Collectors.joining(", "));
         String album = track.album() == null ? null : track.album().name();
         String timecode = formatTimecode(track.playOffsetMs());
 
         String spotifyUrl = null;
-        String youtubeUrl = null;
         if (track.externalMetadata() != null) {
-            if (track.externalMetadata().spotify() != null && track.externalMetadata().spotify().track() != null) {
+            if (track.externalMetadata().spotify() != null
+                    && track.externalMetadata().spotify().track() != null) {
                 spotifyUrl = "https://open.spotify.com/track/" + track.externalMetadata().spotify().track().id();
-            }
-            if (track.externalMetadata().youtube() != null) {
-                youtubeUrl = "https://www.youtube.com/watch?v=" + track.externalMetadata().youtube().vid();
             }
         }
 
-        return Optional.of(new RecognitionResult(track.title(), artist, album, track.releaseDate(), track.label(), timecode, youtubeUrl, spotifyUrl, null));
+        return Optional.of(new RecognitionResult(
+                track.title(),
+                artist,
+                album,
+                track.releaseDate(),
+                track.label(),
+                timecode,
+                null,
+                spotifyUrl,
+                null
+        ));
     }
 
     private String formatTimecode(Integer playOffsetMs) {

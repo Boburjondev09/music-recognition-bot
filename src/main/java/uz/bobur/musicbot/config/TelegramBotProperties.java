@@ -14,6 +14,7 @@ public record TelegramBotProperties(
         @NotBlank String username,
         @NotBlank String apiBaseUrl,
         @NotNull Duration connectTimeout,
-        @NotNull Duration readTimeout
+        @NotNull Duration readTimeout,
+        @NotNull Duration uploadTimeout
 ) {
 }

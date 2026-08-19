@@ -4,6 +4,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import uz.bobur.musicbot.domain.DownloadedTelegramFile;
 import uz.bobur.musicbot.domain.TelegramUserContext;
+import uz.bobur.musicbot.exception.MusicBotException;
 
 import java.util.Optional;
 
@@ -14,10 +15,29 @@ import java.util.Optional;
         havingValue = "false",
         matchIfMissing = true
 )
-public class NoOpAudioStorage implements AudioStorage {
+public class NoOpAudioStorage
+        implements AudioStorage {
 
     @Override
-    public Optional<String> store(DownloadedTelegramFile file, TelegramUserContext user) {
+    public Optional<String> store(
+            DownloadedTelegramFile file,
+            TelegramUserContext user
+    ) {
+
         return Optional.empty();
+    }
+
+    @Override
+    public void delete(
+            String objectName
+    ) {
+
+        if (objectName != null
+                && !objectName.isBlank()) {
+
+            throw new MusicBotException(
+                    "Tarixda MinIO fayli mavjud, lekin MinIO o‘chirilgan. MINIO_ENABLED=true qilib qayta urinib ko‘ring."
+            );
+        }
     }
 }

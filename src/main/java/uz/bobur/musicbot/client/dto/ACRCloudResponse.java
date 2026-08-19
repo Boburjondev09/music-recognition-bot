@@ -32,7 +32,7 @@ public record ACRCloudResponse(Status status, Metadata metadata) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record ExternalMetadata(Spotify spotify, Youtube youtube) {
+    public record ExternalMetadata(Spotify spotify) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -43,7 +43,4 @@ public record ACRCloudResponse(Status status, Metadata metadata) {
     public record SpotifyTrack(String id) {
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Youtube(String vid) {
-    }
 }

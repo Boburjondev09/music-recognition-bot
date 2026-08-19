@@ -15,27 +15,38 @@ import java.util.UUID;
 
 public interface MusicSearchHistoryRepository extends JpaRepository<MusicSearchHistory, UUID> {
 
-    List<MusicSearchHistory> findByTelegramUserIdOrderByCreatedAtDesc(
-            Long telegramUserId,
-            Pageable pageable
-    );
+    List<MusicSearchHistory> findByTelegramUserIdOrderByCreatedAtDesc(Long telegramUserId, Pageable pageable);
 
     long deleteByTelegramUserId(Long telegramUserId);
 
-    Optional<MusicSearchHistory> findFirstByTelegramFileIdAndMediaTypeAndStatusOrderByCreatedAtDesc(
-            String telegramFileId,
-            MediaType mediaType,
-            RecognitionStatus status
-    );
+    Optional<MusicSearchHistory> findFirstByTelegramFileUniqueIdAndMediaTypeAndStatusOrderByCreatedAtDesc(String telegramFileUniqueId, MediaType mediaType, RecognitionStatus status);
+
+    @Query("""
+            select h.minioObjectName
+            from MusicSearchHistory h
+            where h.telegramUserId = :telegramUserId
+              and h.minioObjectName is not null
+            """)
+    List<String> findMinioObjectNamesByTelegramUserId(@Param("telegramUserId") Long telegramUserId);
 
     @Modifying
-    @Query("update MusicSearchHistory h set h.status = :failedStatus, h.errorMessage = :message, h.updatedAt = :now " +
-            "where h.status = :processingStatus and h.createdAt < :threshold")
+    @Query("""
+            update MusicSearchHistory h
+               set h.status = :failedStatus,
+                   h.errorMessage = :message,
+                   h.updatedAt = :now
+             where h.status = :processingStatus
+               and h.createdAt < :threshold
+            """)
     int markStuckProcessingAsFailed(
+
             @Param("processingStatus") RecognitionStatus processingStatus,
+
             @Param("failedStatus") RecognitionStatus failedStatus,
+
             @Param("threshold") Instant threshold,
+
             @Param("message") String message,
-            @Param("now") Instant now
-    );
+
+            @Param("now") Instant now);
 }

@@ -1,6 +1,7 @@
 package uz.bobur.musicbot.config;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -18,7 +19,7 @@ public record ApplicationProperties(
         @Valid @NotNull Processing processing,
         @Valid @NotNull RateLimit rateLimit,
         @Valid @NotNull Cleanup cleanup,
-        @Valid @NotNull Youtube youtube,
+        @Valid @NotNull MusicSearch musicSearch,
         @Valid @NotNull Admin admin
 ) {
     public record Recognition(
@@ -35,20 +36,33 @@ public record ApplicationProperties(
 
     public record RateLimit(
             @Min(1) int maxRequests,
-            @Min(1) int windowSeconds
+            @Min(1) int windowSeconds,
+            @Min(1_000) long cleanupIntervalMillis,
+            @Min(100) int maxTrackedUsers
     ) {
     }
 
     public record Cleanup(
             @Min(1) int stuckProcessingMinutes,
-            @Min(1000) long intervalMillis
+            @Min(1_000) long intervalMillis
     ) {
     }
 
-    public record Youtube(
+    public record MusicSearch(
             boolean enabled,
-            @Min(1) long maxDurationSeconds,
-            @NotNull Duration downloadTimeout
+            @Min(1) @Max(20) int pageSize,
+            @Min(10) @Max(200) int maxResults,
+            @Min(1) @Max(200) int primaryResults,
+            @Min(1) @Max(200) int recommendationResults,
+            @Min(2) int minQueryLength,
+            @Min(20) int maxQueryLength,
+            @NotNull Duration searchTimeout,
+            @NotNull Duration sessionTtl,
+            @Min(10) int maxSessions,
+            @Min(1_000) long cleanupIntervalMillis,
+            @Min(1) int maxConcurrentSearches,
+            @NotNull Duration cacheTtl,
+            @Min(10) int maxCachedQueries
     ) {
     }
 
@@ -67,6 +81,7 @@ public record ApplicationProperties(
             if (userIds == null || userIds.isBlank()) {
                 return Set.of();
             }
+
             try {
                 return Arrays.stream(userIds.split(","))
                         .map(String::trim)
@@ -74,7 +89,10 @@ public record ApplicationProperties(
                         .map(Long::parseLong)
                         .collect(Collectors.toUnmodifiableSet());
             } catch (NumberFormatException exception) {
-                throw new IllegalArgumentException("ADMIN_USER_IDS noto‘g‘ri formatda: " + userIds, exception);
+                throw new IllegalArgumentException(
+                        "ADMIN_USER_IDS noto‘g‘ri formatda: " + userIds,
+                        exception
+                );
             }
         }
     }

@@ -7,5 +7,12 @@ import java.util.Optional;
 
 public interface AudioStorage {
 
-    Optional<String> store(DownloadedTelegramFile file, TelegramUserContext user);
+    Optional<String> store(
+            DownloadedTelegramFile file,
+            TelegramUserContext user
+    );
+
+    void delete(
+            String objectName
+    );
 }

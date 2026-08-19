@@ -1,18 +1,15 @@
-server:
-  port: ${SERVER_PORT:8080}
-
 spring:
-  application:
-    name: music-recognition-bot
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5433/music_recognition}
+    url: ${DB_URL:jdbc:postgresql://postgres:5432/music_recognition}
     username: ${DB_USERNAME:music_user}
     password: ${DB_PASSWORD:music_password}
     driver-class-name: org.postgresql.Driver
+
     hikari:
       maximum-pool-size: ${DB_MAX_POOL_SIZE:10}
       minimum-idle: ${DB_MIN_IDLE:2}
       connection-timeout: 30000
+
   jpa:
     open-in-view: false
     hibernate:
@@ -22,84 +19,119 @@ spring:
         jdbc:
           time_zone: UTC
         format_sql: false
+
   flyway:
     enabled: true
     locations: classpath:db/migration
 
-# Production-safe default: only non-sensitive operational endpoints are exposed.
-# local/test profiles explicitly add metrics.
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info
-  endpoint:
-    health:
-      show-details: never
 
 telegram:
   bot:
     token: ${TELEGRAM_BOT_TOKEN}
     username: ${TELEGRAM_BOT_USERNAME}
-    api-base-url: ${TELEGRAM_API_BASE_URL:https://api.telegram.org}
-    connect-timeout: ${TELEGRAM_CONNECT_TIMEOUT:10s}
-    read-timeout: ${TELEGRAM_READ_TIMEOUT:30s}
-    upload-timeout: ${TELEGRAM_UPLOAD_TIMEOUT:300s}
+    api-base-url: ${TELEGRAM_BOT_API_BASE_URL:https://api.telegram.org}
+    connect-timeout: ${TELEGRAM_BOT_CONNECT_TIMEOUT:10s}
+    read-timeout: ${TELEGRAM_BOT_READ_TIMEOUT:30s}
+    upload-timeout: ${TELEGRAM_BOT_UPLOAD_TIMEOUT:300s}
+
 
 acrcloud:
-  host: ${ACRCLOUD_HOST:identify-eu-west-1.acrcloud.com}
+  host: ${ACRCLOUD_HOST:identify-ap-southeast-1.acrcloud.com}
   access-key: ${ACRCLOUD_ACCESS_KEY}
   access-secret: ${ACRCLOUD_ACCESS_SECRET}
   connect-timeout: ${ACRCLOUD_CONNECT_TIMEOUT:10s}
   read-timeout: ${ACRCLOUD_READ_TIMEOUT:45s}
 
+
 minio:
-  enabled: ${MINIO_ENABLED:false}
-  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+  enabled: ${MINIO_ENABLED:true}
+  endpoint: ${MINIO_ENDPOINT:http://minio:9000}
   access-key: ${MINIO_ACCESS_KEY:minioadmin}
   secret-key: ${MINIO_SECRET_KEY:minioadmin123}
   bucket: ${MINIO_BUCKET:music-audio}
   fail-on-error: ${MINIO_FAIL_ON_ERROR:false}
 
+
+# =========================
+# YT-DLP
+# Optional outbound proxy (http://user:pass@host:port) for
+# YouTube requests, used when YouTube blocks the server's IP.
+# =========================
+ytdlp:
+  proxy: ${YTDLP_PROXY:}
+
+
+# =========================
+# SPOTIFY
+# Text music search
+# =========================
+spotify:
+  enabled: ${SPOTIFY_ENABLED:true}
+  client-id: ${SPOTIFY_CLIENT_ID:}
+  client-secret: ${SPOTIFY_CLIENT_SECRET:}
+  market: ${SPOTIFY_MARKET:UZ}
+  connect-timeout: ${SPOTIFY_CONNECT_TIMEOUT:10s}
+  read-timeout: ${SPOTIFY_READ_TIMEOUT:30s}
+
+
 app:
+
   recognition:
     max-file-size-bytes: ${MAX_RECOGNITION_FILE_SIZE:10485760}
     history-limit: ${HISTORY_LIMIT:10}
+
   processing:
     max-concurrent-jobs: ${MAX_CONCURRENT_JOBS:4}
     queue-capacity: ${PROCESSING_QUEUE_CAPACITY:100}
+
   rate-limit:
     max-requests: ${RATE_LIMIT_MAX_REQUESTS:10}
     window-seconds: ${RATE_LIMIT_WINDOW_SECONDS:60}
     cleanup-interval-millis: ${RATE_LIMIT_CLEANUP_INTERVAL_MILLIS:60000}
     max-tracked-users: ${RATE_LIMIT_MAX_TRACKED_USERS:10000}
+
   cleanup:
     stuck-processing-minutes: ${CLEANUP_STUCK_MINUTES:10}
     interval-millis: ${CLEANUP_INTERVAL_MILLIS:300000}
-  youtube:
-    enabled: ${YOUTUBE_LINK_ENABLED:true}
-    max-duration-seconds: ${YOUTUBE_MAX_DURATION_SECONDS:600}
-    download-timeout: ${YOUTUBE_DOWNLOAD_TIMEOUT:300s}
-    metadata-timeout: ${YOUTUBE_METADATA_TIMEOUT:30s}
-    max-concurrent-downloads: ${YOUTUBE_MAX_CONCURRENT_DOWNLOADS:2}
-    sample-duration-seconds: ${YOUTUBE_SAMPLE_DURATION_SECONDS:30}
-    max-audio-file-size-mb: ${YOUTUBE_MAX_AUDIO_FILE_SIZE_MB:20}
-    max-video-file-size-mb: ${YOUTUBE_MAX_VIDEO_FILE_SIZE_MB:49}
+
   music-search:
     enabled: ${MUSIC_SEARCH_ENABLED:true}
+
     page-size: ${MUSIC_SEARCH_PAGE_SIZE:10}
     max-results: ${MUSIC_SEARCH_MAX_RESULTS:100}
+
     primary-results: ${MUSIC_SEARCH_PRIMARY_RESULTS:40}
     recommendation-results: ${MUSIC_SEARCH_RECOMMENDATION_RESULTS:80}
+
     min-query-length: ${MUSIC_SEARCH_MIN_QUERY_LENGTH:2}
     max-query-length: ${MUSIC_SEARCH_MAX_QUERY_LENGTH:120}
+
     search-timeout: ${MUSIC_SEARCH_TIMEOUT:60s}
+
     session-ttl: ${MUSIC_SEARCH_SESSION_TTL:15m}
     max-sessions: ${MUSIC_SEARCH_MAX_SESSIONS:1000}
+
     cleanup-interval-millis: ${MUSIC_SEARCH_CLEANUP_INTERVAL_MILLIS:60000}
     max-concurrent-searches: ${MUSIC_SEARCH_MAX_CONCURRENT_SEARCHES:2}
+
+    # Search cache
+    cache-ttl: ${MUSIC_SEARCH_CACHE_TTL:15m}
+    max-cached-queries: ${MUSIC_SEARCH_MAX_CACHED_QUERIES:200}
+
   admin:
     user-ids: ${ADMIN_USER_IDS:}
+
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+  endpoint:
+    health:
+      show-details: never
+
 
 logging:
   level:
