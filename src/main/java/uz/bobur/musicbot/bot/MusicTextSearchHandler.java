@@ -441,7 +441,7 @@ public class MusicTextSearchHandler {
 
         Integer progressMessageId = messageSender.sendAndReturn(
                 user.chatId(),
-                "⏳ MP3 tayyorlanmoqda: %s...".formatted(quality.label())
+                "⏳ MP3 tayyorlanmoqda: %s: %s...".formatted(result.title(), quality.label())
         );
 
         try {
