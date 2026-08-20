@@ -39,67 +39,34 @@ public class BotMessageFormatter {
                 : "";
 
         String usage = musicSearchEnabled
-                ? """
-                Foydalanish:
-                1. 10–20 soniyalik aniq audio/video parcha yuboring; yoki
-                2. Masalan: Arctic Monkeys I Wanna Be Yours deb yozing.
-                3. Media fayl %s dan katta bo‘lmasin.
-
-                Matn qidiruvida natijalar 10 tadan sahifalanadi. ⬅️/➡️ bilan sahifalarni almashtirish, sort va ko‘rinish sozlamalarini tanlash mumkin.
-
-                MP3 tugmasi faqat download ruxsati bor tashqi audio manbada aynan shu trek topilganda ishlaydi.
-                """.formatted(humanFileSize(maxFileSizeBytes))
-                : """
-                Foydalanish:
-                10–20 soniyalik aniq audio/video parcha yuboring — men qo‘shiqni ACRCloud orqali aniqlayman.
-                Media fayl %s dan katta bo‘lmasin.
-
-                Matn orqali qidiruv hozircha o‘chirilgan.
-                """.formatted(humanFileSize(maxFileSizeBytes));
+                ? "Audio/video yuboring yoki qo‘shiq nomini yozing."
+                : "Audio yoki video yuboring — qo‘shiqni aniqlab beraman.";
 
         return """
                 Assalomu alaykum%s!
 
-                Men voice/audio/video ichidagi qo‘shiqni ACRCloud orqali aniqlayman.
+                Men qo‘shiqni aniqlab, MP3 qilib topib beraman.
 
                 %s
+                Fayl hajmi %s dan oshmasin.
+
                 Komandalar:
                 %s/help — yordam
-                """.formatted(name, usage, adminCommands);
+                """.formatted(name, usage, humanFileSize(maxFileSizeBytes), adminCommands);
     }
 
     public String help(boolean musicSearchEnabled, long maxFileSizeBytes) {
-        String base = """
-                Qo‘llab-quvvatlanadi:
-                • Telegram voice
-                • MP3, WAV, OGG, M4A va boshqa audio fayllar
-                • %s gacha qisqa video/media — faqat qo‘shiqni aniqlash uchun
-                """.formatted(humanFileSize(maxFileSizeBytes));
+        String searchLine = musicSearchEnabled
+                ? "• Qo‘shiq nomini yozing — men uni topib, MP3 qilib beraman\n"
+                : "";
 
-        String searchSection = musicSearchEnabled
-                ? """
+        return """
+                Men bilan:
+                • Voice yoki audio/video fayl yuboring — qo‘shiqni aniqlayman
+                %sFayl %s dan katta bo‘lmasin.
 
-                • Matn orqali qidiruv — masalan: Ed Sheeran Perfect
-
-                Matn qidiruvi:
-                • Apple iTunes Search API orqali qidiruv
-                • 10 tadan pagination
-                • ⬅️ / ➡️ oldingi va keyingi sahifa
-                • Relevance / Title / Duration bo‘yicha sort
-                • 🎨 tugmasi orqali tugmalar ko‘rinishi
-                • MP3 uchun: 128k / 192k / 256k / 320k
-                """
-                : """
-
-                Matn orqali qidiruv hozircha o‘chirilgan.
-                """;
-
-        return (base + searchSection + """
-
-                Link orqali qidirish va video download funksiyasi yo‘q.
-
-                Recognition uchun musiqa baland va fon shovqini kam bo‘lsin. Odatda 10–20 soniyalik parcha yetarli.
-                """).trim();
+                Yaxshi natija uchun ovoz baland, fon shovqini kam bo‘lsin.
+                """.formatted(searchLine, humanFileSize(maxFileSizeBytes)).trim();
     }
 
     public String fileTooLarge(long maxFileSizeBytes) {
